@@ -10,9 +10,9 @@ import os
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='RTO 1024 waveform acquistion for CH1+CH2',
                                  epilog='Version: 1.0')
-    parser.add_argument('-p','--path',help='path', action='store', default='test')
-    parser.add_argument('-n','--name',help='filename', action='store', default='signal')
-    parser.add_argument('-e','--events',help='Events to acquire default 1', action='store', default='1')
+    parser.add_argument('-p','--path',help='path default=test', action='store', default='test')
+    parser.add_argument('-n','--name',help='filename default=signal', action='store', default='signal')
+    parser.add_argument('-e','--events',help='Events to acquire default=1', action='store', default='1')
 
     args = parser.parse_args()
 
@@ -22,6 +22,9 @@ if __name__ == '__main__':
         inst.read_termination = '\n'
         inst.write_termination = '\n'
         print(inst.query("*IDN?"))
+        inst.write("*RST")
+        print("Correctly opened and reset")
+
     except Exception as e:
         print("Error creating instance: {0}".format(e))
         sys.exit()
@@ -44,6 +47,9 @@ if __name__ == '__main__':
     #scale1=1#V/div
     #scale2=0.1#V/div
     #offset2=0#V
+    inst.write("CHANnel1:STATe ON")
+    inst.write("CHANnel2:STATe ON")
+
     inst.write("CHANnel1:SCALe "+str(scale1))
     inst.write("CHANnel2:SCALe "+str(scale2))
     inst.write("CHANnel2:OFFSet "+str(offset2))
@@ -82,19 +88,33 @@ if __name__ == '__main__':
 
     pathname="./rawWFMs/"+args.path+"/"+args.name
 
-    start_time = time.time()
-    for i in tqdm.tqdm(range(int(args.events))):
-        # grab the waveform
-        inst.query("channel1:data:header?")
-        inst.write("format real,32")
-        wfm1=inst.query_binary_values("channel1:data:values?", datatype='f')
-        wfm2=inst.query_binary_values("channel2:data:values?", datatype='f')
+    inst.write("format real,32")
 
-        #save
-        fsig = open(pathname+"_"+str(i)+".csv","w")
-        for w in range(len(wfm1)):
-            fsig.write(str(wfm1[w])+";"+str(wfm2[w])+"\n")
-        fsig.close()
+    trigger=0
+    pbar = tqdm.tqdm(total = int(args.events))
+    start_time = time.time()
+
+    while trigger<int(args.events):
+    #for i in tqdm.tqdm(range(int(args.events))):
+
+        if inst.query("STATus:OPERation:EVENt?")!="224":
+            continue
+        else:
+            # grab the waveform
+            #inst.query("ACQuire:CURRent?")
+            #inst.query("channel1:data:header?")
+            wfm1=inst.query_binary_values("channel1:data:values?", datatype='f')
+            wfm2=inst.query_binary_values("channel2:data:values?", datatype='f')
+
+            #save
+            fsig = open(pathname+"_"+str(trigger)+".csv","w")
+            for w in range(len(wfm1)):
+                fsig.write(str(wfm1[w])+";"+str(wfm2[w])+"\n")
+            fsig.close()
+
+            trigger=trigger+1
+            pbar.update(1)
+    pbar.close()
 
     finished_time= time.time()
     #save discharge rate during event
